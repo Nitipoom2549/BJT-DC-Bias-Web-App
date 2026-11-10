@@ -53,6 +53,18 @@ REGION_LABELS = {
     "saturation": "Saturation",
 }
 
+CUTOFF_WARNING = (
+    "Cutoff: VTH ≤ VBE ทำให้ทรานซิสเตอร์ไม่นำกระแส; "
+    "แบบจำลอง Forward-Active ใช้ไม่ได้"
+)
+SATURATION_WARNING = (
+    "Saturation: VCE ≤ 0.30 V; "
+    "ค่า IC จากแบบจำลอง Forward-Active อาจสูงเกินจริง"
+)
+VBE_RANGE_WARNING = (
+    "VBE อยู่นอกช่วงปกติ 0.50–0.90 V; ตรวจสอบสมมติฐานอีกครั้ง"
+)
+
 
 class BiasInputError(ValueError):
     """Raised when submitted values are missing, non-numeric, or unphysical."""
@@ -198,9 +210,39 @@ def solve_voltage_divider_bias(
     beta: float,
     vbe: float,
 ) -> BiasResult:
-    """Solve the forward-active operating point of a voltage-divider bias."""
+    """Solve the DC operating point and classify the transistor region."""
     vth = vcc * r2 / (r1 + r2)
     rth = r1 * r2 / (r1 + r2)
+
+    vbe_warning = (
+        (VBE_RANGE_WARNING,)
+        if not (VBE_TYPICAL_RANGE[0] <= vbe <= VBE_TYPICAL_RANGE[1])
+        else ()
+    )
+
+    if vth <= vbe:
+        return BiasResult(
+            vcc=vcc,
+            r1=r1,
+            r2=r2,
+            rc=rc,
+            re=re,
+            beta=beta,
+            vbe=vbe,
+            vth=vth,
+            rth=rth,
+            ib=0.0,
+            ic=0.0,
+            ie=0.0,
+            vb=vth,
+            ve=0.0,
+            vc=vcc,
+            vce=vcc,
+            region="cutoff",
+            warnings=(CUTOFF_WARNING,) + vbe_warning,
+            assumptions=ASSUMPTIONS,
+        )
+
     ib = (vth - vbe) / (rth + (beta + 1.0) * re)
     ic = beta * ib
     ie = (beta + 1.0) * ib
@@ -208,6 +250,13 @@ def solve_voltage_divider_bias(
     vb = ve + vbe
     vc = vcc - ic * rc
     vce = vc - ve
+
+    if vce <= VCE_SATURATION_THRESHOLD:
+        region = "saturation"
+        warnings = (SATURATION_WARNING,) + vbe_warning
+    else:
+        region = "active"
+        warnings = vbe_warning
 
     return BiasResult(
         vcc=vcc,
@@ -226,7 +275,7 @@ def solve_voltage_divider_bias(
         ve=ve,
         vc=vc,
         vce=vce,
-        region="active",
-        warnings=(),
+        region=region,
+        warnings=warnings,
         assumptions=ASSUMPTIONS,
     )

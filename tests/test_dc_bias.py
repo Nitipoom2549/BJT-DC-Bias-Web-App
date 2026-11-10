@@ -141,5 +141,57 @@ class ReferenceCaseTests(unittest.TestCase):
         self.assertEqual(self.result.region_label, "Forward-Active")
 
 
+class RegionTests(unittest.TestCase):
+    def test_cutoff_contract(self):
+        r = solve_voltage_divider_bias(
+            vcc=12.0, r1=100_000.0, r2=22_000.0, rc=2_200.0,
+            re=1_000.0, beta=100.0, vbe=2.5,
+        )
+        self.assertEqual(r.region, "cutoff")
+        self.assertEqual((r.ib, r.ic, r.ie), (0.0, 0.0, 0.0))
+        self.assertAlmostEqual(r.ve, 0.0)
+        self.assertAlmostEqual(r.vb, r.vth)
+
+    def test_cutoff_does_not_assert_base_emitter_identity(self):
+        r = solve_voltage_divider_bias(
+            vcc=12.0, r1=100_000.0, r2=22_000.0, rc=2_200.0,
+            re=1_000.0, beta=100.0, vbe=2.5,
+        )
+        self.assertNotAlmostEqual(r.vb, r.ve + r.vbe, places=6)
+        self.assertAlmostEqual(r.vc, r.vcc)
+        self.assertAlmostEqual(r.vce, r.vcc)
+
+    def test_cutoff_has_warning(self):
+        r = solve_voltage_divider_bias(
+            vcc=12.0, r1=100_000.0, r2=22_000.0, rc=2_200.0,
+            re=1_000.0, beta=100.0, vbe=2.5,
+        )
+        self.assertTrue(any("Cutoff" in w for w in r.warnings))
+
+    def test_saturation_when_vce_at_or_below_threshold(self):
+        r = solve_voltage_divider_bias(
+            vcc=12.0, r1=10_000.0, r2=10_000.0, rc=10_000.0,
+            re=1_000.0, beta=100.0, vbe=0.7,
+        )
+        self.assertEqual(r.region, "saturation")
+        self.assertLessEqual(r.vce, 0.30)
+        self.assertTrue(any("Saturation" in w for w in r.warnings))
+
+    def test_vbe_outside_typical_range_warns_but_solves(self):
+        r = solve_voltage_divider_bias(
+            vcc=12.0, r1=100_000.0, r2=22_000.0, rc=2_200.0,
+            re=1_000.0, beta=100.0, vbe=0.3,
+        )
+        self.assertEqual(r.region, "active")
+        self.assertTrue(any("VBE" in w for w in r.warnings))
+
+    def test_assumptions_are_reported(self):
+        r = solve_voltage_divider_bias(
+            vcc=12.0, r1=100_000.0, r2=22_000.0, rc=2_200.0,
+            re=1_000.0, beta=100.0, vbe=0.7,
+        )
+        self.assertGreaterEqual(len(r.assumptions), 3)
+
+
 if __name__ == "__main__":
     unittest.main()
