@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BJT DC Bias — Voltage Divider</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="hero">
+    <div class="wrap">
+      <p class="eyebrow">ENG29 2121 · Lab 02 · 2/2569</p>
+      <h1>BJT DC Bias Calculator</h1>
+      <p class="lede">
+        คำนวณจุดทำงาน DC ของ NPN Common-Emitter แบบ Voltage-Divider Bias
+        ด้วยแบบจำลอง Forward-Active (β และ VBE คงที่)
+      </p>
+      <p class="scope">ขอบเขต: DC Bias เท่านั้น · ไม่มี AC, Transient หรือ SPICE</p>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="card" aria-labelledby="input-title">
+      <p class="kicker">INPUT</p>
+      <h2 id="input-title">ค่าของวงจร</h2>
+      <p class="muted">
+        กรอกค่าความต้านทานในหน่วย Ω หรือ kΩ แล้วเลือกหน่วยให้ตรงกัน
+        ระบบจะแปลงเป็น Ω ก่อนคำนวณ
+      </p>
+
+      <form method="post" action="{{ url_for('calculate') }}" novalidate>
+        <div class="grid">
+          <div class="field">
+            <label for="vcc">VCC (V)</label>
+            <input id="vcc" name="vcc" type="text" inputmode="decimal"
+                   value="{{ form.get('vcc', '') }}" autocomplete="off">
+            {% if errors.get('vcc') %}<p class="field-error">{{ errors['vcc'] }}</p>{% endif %}
+          </div>
+
+          <div class="field">
+            <label for="r1">R1 (Ω/kΩ)</label>
+            <input id="r1" name="r1" type="text" inputmode="decimal"
+                   value="{{ form.get('r1', '') }}" autocomplete="off">
+            {% if errors.get('r1') %}<p class="field-error">{{ errors['r1'] }}</p>{% endif %}
+          </div>
+
+          <div class="field">
+            <label for="r2">R2 (Ω/kΩ)</label>
+            <input id="r2" name="r2" type="text" inputmode="decimal"
+                   value="{{ form.get('r2', '') }}" autocomplete="off">
+            {% if errors.get('r2') %}<p class="field-error">{{ errors['r2'] }}</p>{% endif %}
+          </div>
+
+          <div class="field">
+            <label for="rc">RC (Ω/kΩ)</label>
+            <input id="rc" name="rc" type="text" inputmode="decimal"
+                   value="{{ form.get('rc', '') }}" autocomplete="off">
+            {% if errors.get('rc') %}<p class="field-error">{{ errors['rc'] }}</p>{% endif %}
+          </div>
+
+          <div class="field">
+            <label for="re">RE (Ω/kΩ)</label>
+            <input id="re" name="re" type="text" inputmode="decimal"
+                   value="{{ form.get('re', '') }}" autocomplete="off">
+            {% if errors.get('re') %}<p class="field-error">{{ errors['re'] }}</p>{% endif %}
+          </div>
+
+          <div class="field">
+            <label for="beta">β (hFE)</label>
+            <input id="beta" name="beta" type="text" inputmode="decimal"
+                   value="{{ form.get('beta', '') }}" autocomplete="off">
+            {% if errors.get('beta') %}<p class="field-error">{{ errors['beta'] }}</p>{% endif %}
+          </div>
+
+          <div class="field">
+            <label for="vbe">VBE (V)</label>
+            <input id="vbe" name="vbe" type="text" inputmode="decimal"
+                   value="{{ form.get('vbe', '') }}" autocomplete="off">
+            {% if errors.get('vbe') %}<p class="field-error">{{ errors['vbe'] }}</p>{% endif %}
+          </div>
+
+          <div class="field">
+            <label for="r_unit">หน่วยความต้านทาน</label>
+            <select id="r_unit" name="r_unit">
+              <option value="kohm" {% if form.get('r_unit', 'kohm') == 'kohm' %}selected{% endif %}>kΩ</option>
+              <option value="ohm" {% if form.get('r_unit') == 'ohm' %}selected{% endif %}>Ω</option>
+            </select>
+            {% if errors.get('r_unit') %}<p class="field-error">{{ errors['r_unit'] }}</p>{% endif %}
+          </div>
+        </div>
+
+        <div class="actions">
+          <button type="submit">Calculate DC Bias</button>
+          <a class="reset" href="{{ url_for('index') }}">Reset</a>
+        </div>
+      </form>
+    </section>
+
+    <section class="card" aria-labelledby="schematic-title">
+      <p class="kicker">CIRCUIT</p>
+      <h2 id="schematic-title">Voltage-Divider Bias (NPN)</h2>
+      <svg class="schematic" viewBox="0 0 520 300" role="img"
+           aria-label="วงจร Voltage-Divider Bias ของ NPN">
+        <g fill="none" stroke="#17344b" stroke-width="2">
+          <path d="M60 30 H460"/>
+          <path d="M60 30 V120 M60 150 V250"/>
+          <path d="M60 120 H120 M60 150 H120"/>
+          <path d="M120 80 V190"/>
+          <path d="M120 120 H170 M120 150 H170"/>
+          <path d="M170 110 V160"/>
+          <path d="M170 135 H220"/>
+          <path d="M220 135 V190"/>
+          <path d="M220 190 H300"/>
+          <path d="M300 190 V250 M300 190 V220"/>
+          <path d="M300 220 H360 M300 250 H360"/>
+          <path d="M360 220 V250"/>
+          <path d="M360 250 V270 H220 V190"/>
+          <path d="M300 190 V120 H460"/>
+          <path d="M460 120 V250"/>
+        </g>
+        <g fill="#17344b" font-family="Tahoma, sans-serif" font-size="13">
+          <text x="245" y="20">VCC</text>
+          <text x="78" y="100">R1</text>
+          <text x="78" y="175">R2</text>
+          <text x="330" y="105">RC</text>
+          <text x="330" y="245">RE</text>
+          <text x="190" y="128">Base</text>
+          <text x="245" y="208">Collector</text>
+          <text x="245" y="268">Emitter</text>
+        </g>
+        <g fill="#0c8078">
+          <circle cx="170" cy="135" r="4"/>
+          <circle cx="300" cy="190" r="4"/>
+        </g>
+      </svg>
+      <p class="muted">
+        R1 จาก VCC ไป Base · R2 จาก Base ลง Ground · RC จาก VCC ไป Collector ·
+        RE จาก Emitter ลง Ground
+      </p>
+    </section>
+
+    {% if result %}
+    <section class="card result-card" aria-labelledby="result-title">
+      <div class="result-head">
+        <div>
+          <p class="kicker">RESULT</p>
+          <h2 id="result-title">จุดทำงาน DC</h2>
+        </div>
+        <span class="badge badge-{{ result.region }}">{{ result.region_label }}</span>
+      </div>
+
+      <div class="tiles">
+        <div class="tile">
+          <span class="tile-label">VB</span>
+          <strong>{{ result.vb|num3 }}</strong><span class="unit">V</span>
+        </div>
+        <div class="tile">
+          <span class="tile-label">VE</span>
+          <strong>{{ result.ve|num3 }}</strong><span class="unit">V</span>
+        </div>
+        <div class="tile">
+          <span class="tile-label">VC</span>
+          <strong>{{ result.vc|num3 }}</strong><span class="unit">V</span>
+        </div>
+        <div class="tile">
+          <span class="tile-label">VCE</span>
+          <strong>{{ result.vce|num3 }}</strong><span class="unit">V</span>
+        </div>
+        <div class="tile">
+          <span class="tile-label">IC</span>
+          <strong>{{ result.ic_ma|num3 }}</strong><span class="unit">mA</span>
+        </div>
+      </div>
+
+      <h3>รายละเอียดการคำนวณ</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>ปริมาณ</th><th>ค่า</th><th>หน่วย</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>VTH</td><td>{{ result.vth|num3 }}</td><td>V</td></tr>
+            <tr><td>RTH</td><td>{{ (result.rth / 1000)|num3 }}</td><td>kΩ</td></tr>
+            <tr><td>IB</td><td>{{ result.ib_ua|num3 }}</td><td>µA</td></tr>
+            <tr><td>IC</td><td>{{ result.ic_ma|num3 }}</td><td>mA</td></tr>
+            <tr><td>IE</td><td>{{ result.ie_ma|num3 }}</td><td>mA</td></tr>
+            <tr><td>VE</td><td>{{ result.ve|num3 }}</td><td>V</td></tr>
+            <tr><td>VB</td><td>{{ result.vb|num3 }}</td><td>V</td></tr>
+            <tr><td>VC</td><td>{{ result.vc|num3 }}</td><td>V</td></tr>
+            <tr><td>VCE</td><td>{{ result.vce|num3 }}</td><td>V</td></tr>
+            <tr><td>กำลังสูญเสียที่ Q</td><td>{{ result.power_q_mw|num3 }}</td><td>mW</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      {% if result.warnings %}
+      <div class="notice warning">
+        <h3>คำเตือน</h3>
+        <ul>
+          {% for warning in result.warnings %}
+          <li>{{ warning }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+
+      <div class="notice assumptions">
+        <h3>สมมติฐานของแบบจำลอง</h3>
+        <ul>
+          {% for assumption in result.assumptions %}
+          <li>{{ assumption }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </section>
+    {% endif %}
+
+    <section class="card" aria-labelledby="equations-title">
+      <p class="kicker">MODEL</p>
+      <h2 id="equations-title">สมการ Forward-Active</h2>
+      <div class="equations">
+        <code>VTH = VCC × R2 / (R1 + R2)</code>
+        <code>RTH = R1 × R2 / (R1 + R2)</code>
+        <code>IB = (VTH − VBE) / (RTH + (β + 1) × RE)</code>
+        <code>IC = β × IB</code>
+        <code>IE = (β + 1) × IB</code>
+        <code>VE = IE × RE</code>
+        <code>VB = VE + VBE</code>
+        <code>VC = VCC − IC × RC</code>
+        <code>VCE = VC − VE</code>
+      </div>
+      <p class="muted">
+        Region: Cutoff เมื่อ VTH ≤ VBE · Saturation เมื่อ VCE ≤ 0.30 V ·
+        VBE นอกช่วง 0.50–0.90 V จะมีคำเตือนเพิ่ม
+      </p>
+    </section>
+  </main>
+
+  <footer class="wrap footer">
+    <p>ENG29 2121 · Lab 02 · BJT DC Bias · Flask + Python backend</p>
+  </footer>
+</body>
+</html>
