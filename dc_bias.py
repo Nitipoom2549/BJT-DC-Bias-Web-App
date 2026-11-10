@@ -10,6 +10,7 @@ from __future__ import annotations
 import math
 import re
 from collections.abc import Mapping
+from dataclasses import dataclass
 
 PARAMETERS = ("vcc", "r1", "r2", "rc", "re", "beta", "vbe")
 RESISTOR_PARAMETERS = ("r1", "r2", "rc", "re")
@@ -38,6 +39,19 @@ INVALID_UNIT_MESSAGE = "หน่วยความต้านทานไม�
 _NUMBER_PATTERN = re.compile(
     r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?"
 )
+
+ASSUMPTIONS: tuple[str, ...] = (
+    "β คงที่ตลอดช่วงการทำงาน",
+    "VBE คงที่ตามค่าที่กรอก",
+    "ไม่คิด Early effect และกระแสรั่ว",
+    "อุณหภูมิคงที่ 25 °C",
+)
+
+REGION_LABELS = {
+    "active": "Forward-Active",
+    "cutoff": "Cutoff",
+    "saturation": "Saturation",
+}
 
 
 class BiasInputError(ValueError):
@@ -128,3 +142,91 @@ def parse_inputs(raw: Mapping[str, str]) -> dict[str, float]:
         assert value is not None
         parsed[field] = to_ohms(value, unit) if field in RESISTOR_PARAMETERS else value
     return parsed
+
+
+@dataclass(frozen=True)
+class BiasResult:
+    """DC operating point and the region judgement for one circuit."""
+
+    vcc: float
+    r1: float
+    r2: float
+    rc: float
+    re: float
+    beta: float
+    vbe: float
+    vth: float
+    rth: float
+    ib: float
+    ic: float
+    ie: float
+    vb: float
+    ve: float
+    vc: float
+    vce: float
+    region: str
+    warnings: tuple[str, ...]
+    assumptions: tuple[str, ...]
+
+    @property
+    def ic_ma(self) -> float:
+        return self.ic * 1_000.0
+
+    @property
+    def ib_ua(self) -> float:
+        return self.ib * 1_000_000.0
+
+    @property
+    def ie_ma(self) -> float:
+        return self.ie * 1_000.0
+
+    @property
+    def power_q_mw(self) -> float:
+        return self.vce * self.ic * 1_000.0
+
+    @property
+    def region_label(self) -> str:
+        return REGION_LABELS.get(self.region, self.region)
+
+
+def solve_voltage_divider_bias(
+    vcc: float,
+    r1: float,
+    r2: float,
+    rc: float,
+    re: float,
+    beta: float,
+    vbe: float,
+) -> BiasResult:
+    """Solve the forward-active operating point of a voltage-divider bias."""
+    vth = vcc * r2 / (r1 + r2)
+    rth = r1 * r2 / (r1 + r2)
+    ib = (vth - vbe) / (rth + (beta + 1.0) * re)
+    ic = beta * ib
+    ie = (beta + 1.0) * ib
+    ve = ie * re
+    vb = ve + vbe
+    vc = vcc - ic * rc
+    vce = vc - ve
+
+    return BiasResult(
+        vcc=vcc,
+        r1=r1,
+        r2=r2,
+        rc=rc,
+        re=re,
+        beta=beta,
+        vbe=vbe,
+        vth=vth,
+        rth=rth,
+        ib=ib,
+        ic=ic,
+        ie=ie,
+        vb=vb,
+        ve=ve,
+        vc=vc,
+        vce=vce,
+        region="active",
+        warnings=(),
+        assumptions=ASSUMPTIONS,
+    )
