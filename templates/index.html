@@ -21,7 +21,7 @@
 
   <main class="wrap">
     <section class="card" aria-labelledby="input-title">
-      <p class="kicker">INPUT</p>
+      <p class="kicker">ข้อมูลนำเข้า</p>
       <h2 id="input-title">ค่าของวงจร</h2>
       <p class="muted">
         กรอกค่าความต้านทานในหน่วย Ω หรือ kΩ แล้วเลือกหน่วยให้ตรงกัน
@@ -89,48 +89,96 @@
           </div>
         </div>
 
+        {% if errors.get('__form__') %}
+        <p class="field-error form-error" role="alert">{{ errors['__form__'] }}</p>
+        {% endif %}
+
         <div class="actions">
           <button type="submit">Calculate DC Bias</button>
-          <a class="reset" href="{{ url_for('index') }}">Reset</a>
+          <a class="reset" href="{{ url_for('index') }}">รีเซ็ต</a>
         </div>
       </form>
     </section>
 
     <section class="card" aria-labelledby="schematic-title">
-      <p class="kicker">CIRCUIT</p>
+      <p class="kicker">วงจร</p>
       <h2 id="schematic-title">Voltage-Divider Bias (NPN)</h2>
-      <svg class="schematic" viewBox="0 0 520 300" role="img"
-           aria-label="วงจร Voltage-Divider Bias ของ NPN">
-        <g fill="none" stroke="#17344b" stroke-width="2">
-          <path d="M60 30 H460"/>
-          <path d="M60 30 V120 M60 150 V250"/>
-          <path d="M60 120 H120 M60 150 H120"/>
-          <path d="M120 80 V190"/>
-          <path d="M120 120 H170 M120 150 H170"/>
-          <path d="M170 110 V160"/>
-          <path d="M170 135 H220"/>
-          <path d="M220 135 V190"/>
-          <path d="M220 190 H300"/>
-          <path d="M300 190 V250 M300 190 V220"/>
-          <path d="M300 220 H360 M300 250 H360"/>
-          <path d="M360 220 V250"/>
-          <path d="M360 250 V270 H220 V190"/>
-          <path d="M300 190 V120 H460"/>
-          <path d="M460 120 V250"/>
+      <svg class="schematic" viewBox="0 0 520 360" role="img"
+           aria-label="วงจร Voltage-Divider Bias ของ NPN: แหล่งจ่าย VCC ขั้วบวก, R1 จาก VCC ไปเบส, R2 จากเบสลงกราวด์, RC จาก VCC ไปคอลเลกเตอร์, RE จากอิมิตเตอร์ลงกราวด์">
+        <defs>
+          <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"
+                  markerUnits="strokeWidth">
+            <path d="M0,0 L0,6 L9,3 z" fill="#17344b"/>
+          </marker>
+        </defs>
+        <!-- VCC rail with + supply -->
+        <g fill="none" stroke="#17344b" stroke-width="2" stroke-linecap="round">
+          <path d="M70 30 H470"/>
+          <path d="M70 30 M70 24 L85 24 M70 36 L85 36" stroke-width="2"/>
+          <text x="55" y="28" font-size="14" fill="#17344b" text-anchor="end">+</text>
+          <!-- Ground rail with - supply -->
+          <path d="M70 292 H200"/>
+          <path d="M70 292 M70 286 L85 286 M70 298 L85 298" stroke-width="2"/>
+          <text x="55" y="294" font-size="14" fill="#17344b" text-anchor="end">−</text>
         </g>
-        <g fill="#17344b" font-family="Tahoma, sans-serif" font-size="13">
-          <text x="245" y="20">VCC</text>
-          <text x="78" y="100">R1</text>
-          <text x="78" y="175">R2</text>
-          <text x="330" y="105">RC</text>
-          <text x="330" y="245">RE</text>
-          <text x="190" y="128">Base</text>
-          <text x="245" y="208">Collector</text>
-          <text x="245" y="268">Emitter</text>
+        <!-- Labels for rails -->
+        <g fill="#17344b" font-family="Tahoma, sans-serif" font-size="14" font-weight="700">
+          <text x="480" y="24" text-anchor="end">VCC</text>
+          <text x="480" y="286" text-anchor="end">GND</text>
         </g>
-        <g fill="#0c8078">
-          <circle cx="170" cy="135" r="4"/>
-          <circle cx="300" cy="190" r="4"/>
+        <!-- R1: VCC -> base node (vertical resistor) -->
+        <g fill="none" stroke="#17344b" stroke-width="2" stroke-linecap="round">
+          <path d="M140 30 V50 M140 100 V170"/>
+          <rect x="125" y="50" width="30" height="50" rx="2"/>
+          <!-- Base node -->
+          <path d="M140 170 H270"/>
+          <circle cx="140" cy="170" r="3.5" fill="#17344b"/>
+        </g>
+        <!-- R2: base node -> ground (vertical resistor) -->
+        <g fill="none" stroke="#17344b" stroke-width="2" stroke-linecap="round">
+          <path d="M140 170 V200 M140 250 V280"/>
+          <rect x="125" y="200" width="30" height="50" rx="2"/>
+        </g>
+        <!-- RC: VCC -> collector (vertical resistor) -->
+        <g fill="none" stroke="#17344b" stroke-width="2" stroke-linecap="round">
+          <path d="M305 30 V50 M305 100 V130"/>
+          <rect x="290" y="50" width="30" height="50" rx="2"/>
+          <!-- Collector lead -->
+          <path d="M305 130 L270 160"/>
+        </g>
+        <!-- NPN transistor -->
+        <g fill="none" stroke="#17344b" stroke-width="2" stroke-linecap="round">
+          <!-- base bar -->
+          <path d="M270 150 V210" stroke-width="5"/>
+          <!-- base connection from R1 node -->
+          <path d="M270 160 H285 M270 180 H285"/>
+          <!-- emitter lead -->
+          <path d="M270 190 L305 220"/>
+          <!-- collector-emitter arrow -->
+          <path d="M285 150 L285 200" marker-end="url(#arrow)" stroke-width="1.5"/>
+        </g>
+        <polygon points="304,219 291,216 298,208" fill="#17344b"/>
+        <circle cx="305" cy="130" r="3.5" fill="#17344b"/>
+        <!-- RE: emitter -> ground (vertical resistor) -->
+        <g fill="none" stroke="#17344b" stroke-width="2" stroke-linecap="round">
+          <path d="M305 220 V240 M305 290 V310"/>
+          <rect x="290" y="240" width="30" height="50" rx="2"/>
+        </g>
+        <!-- Ground symbols -->
+        <g fill="none" stroke="#17344b" stroke-width="2" stroke-linecap="round">
+          <path d="M124 280 H156 M130 287 H150 M136 294 H144"/>
+          <path d="M289 310 H321 M295 317 H315 M301 324 H309"/>
+        </g>
+        <!-- Labels -->
+        <g fill="#17344b" font-family="Tahoma, sans-serif" font-size="14" font-weight="700">
+          <text x="98" y="80">R1</text>
+          <text x="98" y="230">R2</text>
+          <text x="335" y="80">RC</text>
+          <text x="335" y="270">RE</text>
+          <text x="330" y="175">Q1</text>
+          <text x="195" y="195" font-size="13" font-weight="400">Base</text>
+          <text x="290" y="150" font-size="13" font-weight="400">Collector</text>
+          <text x="330" y="250" font-size="13" font-weight="400">Emitter</text>
         </g>
       </svg>
       <p class="muted">
@@ -143,7 +191,7 @@
     <section class="card result-card" aria-labelledby="result-title">
       <div class="result-head">
         <div>
-          <p class="kicker">RESULT</p>
+          <p class="kicker">ผลลัพธ์</p>
           <h2 id="result-title">จุดทำงาน DC</h2>
         </div>
         <span class="badge badge-{{ result.region }}">{{ result.region_label }}</span>
@@ -180,7 +228,7 @@
           </thead>
           <tbody>
             <tr><td>VTH</td><td>{{ result.vth|num3 }}</td><td>V</td></tr>
-            <tr><td>RTH</td><td>{{ (result.rth / 1000)|num3 }}</td><td>kΩ</td></tr>
+            <tr><td>RTH</td><td>{{ result.rth_kohm|num3 }}</td><td>kΩ</td></tr>
             <tr><td>IB</td><td>{{ result.ib_ua|num3 }}</td><td>µA</td></tr>
             <tr><td>IC</td><td>{{ result.ic_ma|num3 }}</td><td>mA</td></tr>
             <tr><td>IE</td><td>{{ result.ie_ma|num3 }}</td><td>mA</td></tr>
@@ -216,7 +264,7 @@
     {% endif %}
 
     <section class="card" aria-labelledby="equations-title">
-      <p class="kicker">MODEL</p>
+      <p class="kicker">แบบจำลอง</p>
       <h2 id="equations-title">สมการ Forward-Active</h2>
       <div class="equations">
         <code>VTH = VCC × R2 / (R1 + R2)</code>
@@ -230,7 +278,8 @@
         <code>VCE = VC − VE</code>
       </div>
       <p class="muted">
-        Region: Cutoff เมื่อ VTH ≤ VBE · Saturation เมื่อ VCE ≤ 0.30 V ·
+        Region: Cutoff เมื่อ VTH ≤ VBE · Saturation เมื่อ VCE ≤ 0.30 V
+        (แก้สมการด้วย VCE = 0.30 V และ IC จาก RC/RE) ·
         VBE นอกช่วง 0.50–0.90 V จะมีคำเตือนเพิ่ม
       </p>
     </section>

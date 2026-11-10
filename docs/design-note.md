@@ -34,8 +34,8 @@ Common-Emitter แบบ Voltage-Divider Bias โดยให้ Python Backend 
 
 - `VTH ≤ VBE` → **Cutoff**: `IB = IC = IE = 0`, `VE = 0`, `VB = VTH`,
   `VC = VCE = VCC`, มีคำเตือน
-- `VCE ≤ 0.30 V` → **Saturation**: คงค่าจาก Forward-Active ไว้ให้ตรวจ
-  แต่มีคำเตือนว่าค่า IC อาจสูงเกินจริง
+- `VCE ≤ 0.30 V` → **Saturation**: แก้สมการด้วย `VCE = 0.30 V` คงที่
+  `IC` มาจาก `RC`/`RE` (ไม่ใช่ `β × IB`) เพื่อให้ทุกค่าที่แสดงเป็นไปได้ทางฟิสิกส์
 - นอกนั้น → **Forward-Active**
 - `VBE` นอกช่วง `0.50–0.90 V` → คำเตือนเพิ่ม แต่ยังคำนวณ
 

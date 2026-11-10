@@ -193,5 +193,63 @@ class RegionTests(unittest.TestCase):
         self.assertGreaterEqual(len(r.assumptions), 3)
 
 
+class SaturationSolutionTests(unittest.TestCase):
+    """Saturation must be solved with VCE fixed, not with beta x IB."""
+
+    def setUp(self):
+        self.result = solve_voltage_divider_bias(
+            vcc=12.0, r1=10_000.0, r2=10_000.0, rc=10_000.0,
+            re=1_000.0, beta=100.0, vbe=0.70,
+        )
+
+    def test_saturation_currents_match_hand_calculation(self):
+        r = self.result
+        self.assertAlmostEqual(r.ic, 9.9846153846154e-4, places=11)
+        self.assertAlmostEqual(r.ib, 7.1692307692308e-4, places=11)
+        self.assertAlmostEqual(r.ie, 1.7153846153846e-3, places=11)
+
+    def test_saturation_voltages_match_hand_calculation(self):
+        r = self.result
+        self.assertAlmostEqual(r.vce, 0.30, places=9)
+        self.assertAlmostEqual(r.ve, 1.7153846153846, places=9)
+        self.assertAlmostEqual(r.vc, 2.0153846153846, places=9)
+        self.assertAlmostEqual(r.vb, 2.4153846153846, places=9)
+
+    def test_saturation_satisfies_circuit_laws(self):
+        r = self.result
+        self.assertAlmostEqual(r.ie, r.ic + r.ib, places=12)
+        self.assertAlmostEqual(r.vb, r.ve + r.vbe, places=9)
+        self.assertAlmostEqual(r.vc, r.vcc - r.ic * r.rc, places=9)
+        self.assertAlmostEqual(r.vce, r.vc - r.ve, places=9)
+        self.assertAlmostEqual(r.vth, r.ib * r.rth + r.vbe + r.ie * r.re, places=9)
+
+    def test_saturation_outputs_are_physical(self):
+        r = self.result
+        self.assertGreater(r.ic, 0.0)
+        self.assertGreater(r.ib, 0.0)
+        self.assertGreater(r.ve, 0.0)
+        self.assertLess(r.vc, r.vcc)
+        self.assertGreater(r.power_q_mw, 0.0)
+
+    def test_saturation_is_not_beta_controlled(self):
+        r = self.result
+        self.assertLess(r.ic / r.ib, r.beta)
+        self.assertNotAlmostEqual(r.ic / r.ib, r.beta, places=1)
+
+    def test_saturation_assumption_is_reported(self):
+        self.assertTrue(any("VCE" in a for a in self.result.assumptions))
+
+    def test_inconsistent_saturation_falls_back_to_cutoff(self):
+        r = solve_voltage_divider_bias(
+            vcc=12.0, r1=1_000.0, r2=100_000.0, rc=1_000.0,
+            re=100_000.0, beta=100.0, vbe=0.0,
+        )
+        self.assertEqual(r.region, "cutoff")
+        self.assertEqual((r.ib, r.ic, r.ie), (0.0, 0.0, 0.0))
+        self.assertAlmostEqual(r.vb, r.vth)
+        self.assertAlmostEqual(r.vc, r.vcc)
+        self.assertTrue(any("Saturation" in w for w in r.warnings))
+
+
 if __name__ == "__main__":
     unittest.main()

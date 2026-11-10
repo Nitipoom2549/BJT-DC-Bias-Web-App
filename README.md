@@ -55,7 +55,11 @@ accordingly.
 
 ## Setup
 
+Clone the repository, then create the virtual environment:
+
 ```powershell
+git clone <repository-url>
+cd "BJT DC Bias Web App"
 py -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
@@ -63,6 +67,8 @@ py -m venv .venv
 Linux/macOS:
 
 ```bash
+git clone <repository-url>
+cd "BJT DC Bias Web App"
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
@@ -98,7 +104,7 @@ Linux/macOS:
 python -m unittest discover -s tests -v
 ```
 
-Expected: 34 tests pass, 0 failures, 0 errors.
+Expected: 43 tests pass, 0 failures, 0 errors.
 
 ## Reference case
 
@@ -139,11 +145,27 @@ VCE = VC − VE
 | Condition | Region | Behaviour |
 |---|---|---|
 | `VTH ≤ VBE` | Cutoff | Currents set to zero, `VE = 0`, `VB = VTH`, `VC = VCE = VCC`, warning shown |
-| `VCE ≤ 0.30 V` | Saturation | Forward-active values kept for inspection, warning shown |
+| `VCE ≤ 0.30 V` | Saturation | Solved with `VCE` fixed at `0.30 V`; `IC` comes from `RC`/`RE`, warning shown |
 | otherwise | Forward-Active | Values shown normally |
 
+In saturation the transistor is no longer a current source, so `IC = β × IB`
+does not apply. The app solves the same circuit with `VCE = 0.30 V`:
+
+```text
+IE = IC + IB
+VE = IE × RE
+VC = VE + VCE(sat)
+VTH = IB × RTH + VBE + VE
+VCC = IC × RC + VCE(sat) + VE
+```
+
+This keeps every displayed value physical (`IC`, `VE`, and the dissipation stay
+positive). If the supplied `VBE` makes that solution impossible (`IC ≤ 0`), the
+app reports Cutoff instead of inventing values.
+
 `VBE` outside `0.50–0.90 V` adds a warning but does not stop the calculation.
-The `0.30 V` threshold flags model invalidity; it is not a SPICE model.
+The `0.30 V` value is a model assumption and region threshold; it is not a
+SPICE model.
 
 ## Validation rules
 
@@ -157,18 +179,17 @@ The `0.30 V` threshold flags model invalidity; it is not a SPICE model.
 | unit | `Ω` or `kΩ` |
 
 Invalid submissions return HTTP 400 and re-render the form with Thai field
-errors; valid submissions return HTTP 200.
+errors; valid submissions return HTTP 200. Inputs whose result overflows the
+floating-point range are rejected with a Thai error instead of rendering `nan`.
 
 ## Assumptions and limitations
 
 - Constant `β` and constant `VBE`.
 - No Early effect, leakage current, temperature drift, or component tolerance.
-- Forward-active equations are not valid in cutoff or saturation; the app warns
-  instead of pretending otherwise.
+- Saturation assumes `VCE = 0.30 V`; `VBE(sat)` is not modelled separately.
 - Local development server only.
 
 ## Commit protocol
 
-Commits are made with GitHub Desktop (or, when the GUI is unavailable, the Git
-binary bundled with it) on branch `lab02-dc-bias`. The agent reports changed
-files and test evidence; the owner reviews the diff and pushes.
+The owner commits and pushes on branch `lab02-dc-bias`. The agent reports changed
+files and test evidence but never runs `git commit` or `git push`.

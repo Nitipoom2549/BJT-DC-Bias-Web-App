@@ -71,6 +71,52 @@ VCE = VC − VE = 9.294312 − 1.242157 = 8.052155 V
 | VC | 9.294312 V | `ReferenceCaseTests.test_voltages_match_hand_calculation` |
 | VCE | 8.052155 V | `ReferenceCaseTests.test_voltages_match_hand_calculation` |
 
+## ตัวอย่าง Saturation ที่คำนวณมือ
+
+Saturation ไม่ใช้ `IC = β × IB` เพราะทรานซิสเตอร์ไม่ทำหน้าที่เป็นแหล่งกระแส
+แบบจำลองกำหนด `VCE = 0.30 V` แล้วแก้สมการวงจรเดียวกัน
+
+วงจร: `VCC = 12 V`, `R1 = R2 = RC = 10 kΩ`, `RE = 1 kΩ`, `β = 100`,
+`VBE = 0.70 V` → `VTH = 6 V`, `RTH = 5 kΩ`
+
+```text
+VTH = IB × RTH + VBE + IE × RE
+VCC = IC × RC + VCE(sat) + IE × RE
+IE  = IC + IB
+```
+
+แทน `IC = (11.7 − IE × 1,000) / 10,000` และ
+`IB = (5.3 − IE × 1,000) / 5,000` ลงใน `IE = IC + IB`:
+
+```text
+10,000 × IE = (11.7 − 1,000 × IE) + 2 × (5.3 − 1,000 × IE)
+13,000 × IE = 22.3
+IE = 1.715384615 mA
+IC = (11.7 − 1.715384615) / 10,000 = 0.998461538 mA
+IB = (5.3 − 1.715384615) / 5,000  = 0.716923077 mA
+```
+
+```text
+VE  = IE × RE = 1.715384615 V
+VB  = VE + VBE = 2.415384615 V
+VC  = VE + VCE(sat) = 2.015384615 V
+VCE = 0.300 V
+P   = VCE × IC = 0.299538 mW
+βforced = IC / IB ≈ 1.39  (ไม่เท่ากับ β = 100)
+```
+
+ตรวจ KVL ฝั่ง collector: `VC = 12 − 0.998461538 mA × 10 kΩ = 2.015384615 V` ✓
+
+| ปริมาณ | ค่าที่คำนวณมือ | เทสต์ที่ยืนยัน |
+|---|---|---|
+| IC | 0.998462 mA | `SaturationSolutionTests.test_saturation_currents_match_hand_calculation` |
+| IB | 0.716923 mA | `SaturationSolutionTests.test_saturation_currents_match_hand_calculation` |
+| IE | 1.715385 mA | `SaturationSolutionTests.test_saturation_currents_match_hand_calculation` |
+| VE | 1.715385 V | `SaturationSolutionTests.test_saturation_voltages_match_hand_calculation` |
+| VB | 2.415385 V | `SaturationSolutionTests.test_saturation_voltages_match_hand_calculation` |
+| VC | 2.015385 V | `SaturationSolutionTests.test_saturation_voltages_match_hand_calculation` |
+| VCE | 0.300 V | `SaturationSolutionTests.test_saturation_voltages_match_hand_calculation` |
+
 ## เอกลักษณ์ที่ตรวจเพิ่ม
 
 ใน active/saturation:
@@ -90,7 +136,7 @@ VCE = VC − VE
 
 ```text
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
-Ran 34 tests
+Ran 43 tests
 OK
 ```
 
@@ -98,5 +144,5 @@ OK
 
 - ค่า β และ VBE ถือว่าคงที่
 - ไม่คิด Early effect, กระแสรั่ว, อุณหภูมิ, หรือ tolerance
-- ค่าใน saturation ยังเป็นค่าจาก Forward-Active เพื่อให้ตรวจได้
-  แต่แอปแสดงคำเตือนว่าแบบจำลองใช้ไม่ได้
+- Saturation กำหนด `VCE = 0.30 V` คงที่ (ไม่ได้แยก `VBE(sat)`) และ
+  `IC` มาจาก `RC`/`RE` ไม่ได้มาจาก `β`

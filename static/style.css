@@ -134,6 +134,10 @@ main { padding: 24px 0 40px; }
   color: var(--red);
 }
 
+.form-error {
+  margin-top: 16px;
+}
+
 .actions {
   display: flex;
   align-items: center;

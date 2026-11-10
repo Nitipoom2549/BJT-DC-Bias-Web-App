@@ -59,8 +59,34 @@ class WebTests(unittest.TestCase):
     def test_missing_unit_defaults_to_ohm(self):
         data = {k: v for k, v in REFERENCE_FORM.items() if k != "r_unit"}
         response = self.client.post("/calculate", data=data)
+        body = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
-        self.assertIn("9.294", response.get_data(as_text=True))
+        # In ohms the reference resistors give IC = 1,229.858 mA; in kOhms,
+        # 1.230 mA. Only the unit-sensitive value proves the default.
+        self.assertIn("1,229.858", body)
+
+    def test_saturation_post_reports_physical_operating_point(self):
+        data = dict(REFERENCE_FORM, r1="10", r2="10", rc="10")
+        response = self.client.post("/calculate", data=data)
+        body = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Saturation", body)
+        self.assertIn("0.300", body)
+        self.assertNotIn("-215.250", body)
+
+    def test_unrepresentable_result_returns_400_not_nan(self):
+        data = dict(
+            REFERENCE_FORM,
+            vcc="1e308",
+            r1="1e308",
+            r2="1e308",
+            rc="1e308",
+            re="1e308",
+            beta="1e308",
+        )
+        response = self.client.post("/calculate", data=data)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("เกินขอบเขตตัวเลข", response.get_data(as_text=True))
 
 
 if __name__ == "__main__":

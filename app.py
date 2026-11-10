@@ -21,10 +21,6 @@ def create_app(test_config: dict | None = None) -> Flask:
     def num3(value: float) -> str:
         return f"{value:,.3f}"
 
-    @app.template_filter("num0")
-    def num0(value: float) -> str:
-        return f"{value:,.0f}"
-
     def render_page(
         form,
         result=None,

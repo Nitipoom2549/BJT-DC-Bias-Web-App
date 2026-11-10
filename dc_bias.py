@@ -58,11 +58,22 @@ CUTOFF_WARNING = (
     "แบบจำลอง Forward-Active ใช้ไม่ได้"
 )
 SATURATION_WARNING = (
-    "Saturation: VCE ≤ 0.30 V; "
-    "ค่า IC จากแบบจำลอง Forward-Active อาจสูงเกินจริง"
+    "Saturation: กำหนด VCE = 0.30 V; IC ถูกจำกัดด้วย RC และ RE "
+    "ไม่ใช่ β × IB"
+)
+SATURATION_FALLBACK_WARNING = (
+    "Saturation: ไม่สามารถแก้สมการ Saturation ด้วยค่า VBE นี้ได้ (IC ≤ 0); "
+    "ตรวจสอบ VBE แล้วรายงานเป็น Cutoff"
 )
 VBE_RANGE_WARNING = (
     "VBE อยู่นอกช่วงปกติ 0.50–0.90 V; ตรวจสอบสมมติฐานอีกครั้ง"
+)
+NON_FINITE_RESULT_MESSAGE = (
+    "ค่าที่คำนวณได้เกินขอบเขตตัวเลข กรุณาลดขนาดค่าที่กรอก"
+)
+
+SATURATION_ASSUMPTION = (
+    "Saturation: กำหนด VCE = 0.30 V และหา IC จากวงจร RC/RE"
 )
 
 
@@ -197,8 +208,58 @@ class BiasResult:
         return self.vce * self.ic * 1_000.0
 
     @property
+    def rth_kohm(self) -> float:
+        return self.rth / 1_000.0
+
+    @property
     def region_label(self) -> str:
         return REGION_LABELS.get(self.region, self.region)
+
+
+def _solve_saturation(
+    vcc: float,
+    rc: float,
+    re: float,
+    vth: float,
+    rth: float,
+    vbe: float,
+) -> tuple[float, float, float, float, float, float] | None:
+    """Solve the circuit with ``VCE`` fixed at the saturation threshold.
+
+    In saturation the collector current is set by ``RC`` and ``RE``, not by
+    ``beta * IB``. With ``VE = IE * RE``, ``VC = VE + VCE`` and
+    ``IE = IC + IB``, the base loop ``VTH = IB * RTH + VBE + VE`` and the
+    collector loop ``VCC = IC * RC + VCE + VE`` reduce to one equation in
+    ``IC``.
+
+    Returns ``(ib, ic, ie, ve, vb, vc)``, or ``None`` when the supplied
+    ``VBE`` cannot produce a physical solution (``IC <= 0`` or ``IB < 0``).
+    """
+    vce = VCE_SATURATION_THRESHOLD
+    share = re / (rth + re)
+    ic = (vcc - vce - share * (vth - vbe)) / (rc + re - share * re)
+    ib = (vth - vbe - ic * re) / (rth + re)
+    if ic <= 0.0 or ib < 0.0:
+        return None
+    ie = ic + ib
+    ve = ie * re
+    return ib, ic, ie, ve, ve + vbe, ve + vce
+
+
+def _ensure_finite(result: BiasResult) -> None:
+    values = (
+        result.vth,
+        result.rth,
+        result.ib,
+        result.ic,
+        result.ie,
+        result.vb,
+        result.ve,
+        result.vc,
+        result.vce,
+    )
+    if not all(math.isfinite(value) for value in values):
+        raise BiasInputError({"__form__": NON_FINITE_RESULT_MESSAGE})
 
 
 def solve_voltage_divider_bias(
@@ -220,8 +281,8 @@ def solve_voltage_divider_bias(
         else ()
     )
 
-    if vth <= vbe:
-        return BiasResult(
+    def cutoff_result(warning: str) -> BiasResult:
+        result = BiasResult(
             vcc=vcc,
             r1=r1,
             r2=r2,
@@ -239,9 +300,14 @@ def solve_voltage_divider_bias(
             vc=vcc,
             vce=vcc,
             region="cutoff",
-            warnings=(CUTOFF_WARNING,) + vbe_warning,
+            warnings=(warning,) + vbe_warning,
             assumptions=ASSUMPTIONS,
         )
+        _ensure_finite(result)
+        return result
+
+    if vth <= vbe:
+        return cutoff_result(CUTOFF_WARNING)
 
     ib = (vth - vbe) / (rth + (beta + 1.0) * re)
     ic = beta * ib
@@ -252,13 +318,20 @@ def solve_voltage_divider_bias(
     vce = vc - ve
 
     if vce <= VCE_SATURATION_THRESHOLD:
+        saturation = _solve_saturation(vcc, rc, re, vth, rth, vbe)
+        if saturation is None:
+            return cutoff_result(SATURATION_FALLBACK_WARNING)
+        ib, ic, ie, ve, vb, vc = saturation
+        vce = VCE_SATURATION_THRESHOLD
         region = "saturation"
         warnings = (SATURATION_WARNING,) + vbe_warning
+        assumptions = ASSUMPTIONS + (SATURATION_ASSUMPTION,)
     else:
         region = "active"
         warnings = vbe_warning
+        assumptions = ASSUMPTIONS
 
-    return BiasResult(
+    result = BiasResult(
         vcc=vcc,
         r1=r1,
         r2=r2,
@@ -277,5 +350,7 @@ def solve_voltage_divider_bias(
         vce=vce,
         region=region,
         warnings=warnings,
-        assumptions=ASSUMPTIONS,
+        assumptions=assumptions,
     )
+    _ensure_finite(result)
+    return result
