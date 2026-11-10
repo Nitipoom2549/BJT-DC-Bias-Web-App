@@ -136,10 +136,10 @@
         </g>
         <!-- NPN transistor -->
         <g fill="none" stroke="#17344b" stroke-width="2" stroke-linecap="round">
+          <!-- collector lead -->
+          <path d="M270 130 L270 170"/>
           <!-- base bar -->
           <path d="M270 150 V210" stroke-width="5"/>
-          <!-- base connection from R1 node -->
-          <path d="M270 160 H285 M270 180 H285"/>
           <!-- emitter lead -->
           <path d="M270 190 L305 220"/>
         </g>
@@ -152,8 +152,10 @@
         </g>
         <!-- Ground symbols -->
         <g fill="none" stroke="#17344b" stroke-width="2" stroke-linecap="round">
-          <path d="M124 280 H156 M130 287 H150"/>
-          <path d="M289 310 H321 M295 317 H315 M301 324 H309"/>
+          <!-- Top GND symbol (longest) -->
+          <path d="M124 280 H160 M130 287 H155"/>
+          <!-- Bottom GND symbol (shortest) -->
+          <path d="M289 310 H300 M295 315 H300 M301 319 H300"/>
         </g>
         <!-- Labels -->
         <g fill="#17344b" font-family="Tahoma, sans-serif" font-size="14" font-weight="700">
