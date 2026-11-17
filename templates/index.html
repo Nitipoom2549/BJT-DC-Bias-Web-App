@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BJT DC Bias — Divider / Fixed / Emitter</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="hero">
+    <div class="wrap">
+      <p class="eyebrow">ENG29 2121 · Lab 02–03 · 2/2569</p>
+      <h1>BJT DC Bias Calculator</h1>
+      <p class="lede">
+        คำนวณจุดทำงาน DC ของ NPN Common-Emitter สามวงจรไบอัส
+        ด้วยแบบจำลอง Forward-Active (β และ VBE คงที่)
+      </p>
+      <p class="scope">ขอบเขต: DC Bias เท่านั้น · ไม่มี AC, Transient หรือ SPICE</p>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="card" aria-labelledby="mode-title">
+      <p class="kicker">วงจรไบอัส</p>
+      <h2 id="mode-title">เลือกโหมด</h2>
+      <form class="mode-form" method="get" action="{{ url_for('index') }}">
+        <div class="field">
+          <label for="mode">โหมดที่ใช้คำนวณ</label>
+          <select id="mode" name="mode">
+            {% for key, label in mode_labels.items() %}
+            <option value="{{ key }}" {% if key == mode %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button type="submit" class="secondary">ใช้โหมดนี้</button>
+      </form>
+      <p class="muted">
+        กำลังใช้: <strong>{{ mode_labels[mode] }}</strong> ·
+        สลับโหมดแล้วหน้านี้จะโหลดฟอร์มของโหมดนั้นใหม่ (ไม่ใช้ JavaScript)
+      </p>
+      {% if errors.get('mode') %}
+      <p class="field-error" role="alert">{{ errors['mode'] }}</p>
+      {% endif %}
+    </section>
+
+    <section class="card" aria-labelledby="input-title">
+      <p class="kicker">ข้อมูลนำเข้า · {{ mode_labels[mode] }}</p>
+      <h2 id="input-title">ค่าของวงจร</h2>
+      <p class="muted">
+        กรอกค่าความต้านทานในหน่วย Ω หรือ kΩ แล้วเลือกหน่วยให้ตรงกัน
+        ระบบจะแปลงเป็น Ω ก่อนคำนวณ
+      </p>
+
+      <form method="post" action="{{ url_for('calculate') }}" novalidate>
+        <input type="hidden" name="mode" value="{{ mode }}">
+
+        <div class="grid">
+          <div class="field">
+            <label for="vcc">VCC (V)</label>
+            <input id="vcc" name="vcc" type="text" inputmode="decimal"
+                   value="{{ form.get('vcc', '') }}" autocomplete="off">
+            {% if errors.get('vcc') %}<p class="field-error">{{ errors['vcc'] }}</p>{% endif %}
+          </div>
+
+          {% if mode == 'divider' %}
+          <div class="field">
+            <label for="r1">R1 (Ω/kΩ)</label>
+            <input id="r1" name="r1" type="text" inputmode="decimal"
+                   value="{{ form.get('r1', '') }}" autocomplete="off">
+            {% if errors.get('r1') %}<p class="field-error">{{ errors['r1'] }}</p>{% endif %}
+          </div>
+
+          <div class="field">
+            <label for="r2">R2 (Ω/kΩ)</label>
+            <input id="r2" name="r2" type="text" inputmode="decimal"
+                   value="{{ form.get('r2', '') }}" autocomplete="off">
+            {% if errors.get('r2') %}<p class="field-error">{{ errors['r2'] }}</p>{% endif %}
+          </div>
+          {% else %}
+          <div class="field">
+            <label for="rb">RB (Ω/kΩ)</label>
+            <input id="rb" name="rb" type="text" inputmode="decimal"
+                   value="{{ form.get('rb', '') }}" autocomplete="off">
+            {% if errors.get('rb') %}<p class="field-error">{{ errors['rb'] }}</p>{% endif %}
+          </div>
+          {% endif %}
+
+          <div class="field">
+            <label for="rc">RC (Ω/kΩ)</label>
+            <input id="rc" name="rc" type="text" inputmode="decimal"
+                   value="{{ form.get('rc', '') }}" autocomplete="off">
+            {% if errors.get('rc') %}<p class="field-error">{{ errors['rc'] }}</p>{% endif %}
+          </div>
+
+          {% if mode != 'fixed' %}
+          <div class="field">
+            <label for="re">RE (Ω/kΩ)</label>
+            <input id="re" name="re" type="text" inputmode="decimal"
+                   value="{{ form.get('re', '') }}" autocomplete="off">
+            {% if errors.get('re') %}<p class="field-error">{{ errors['re'] }}</p>{% endif %}
+          </div>
+          {% endif %}
+
+          <div class="field">
+            <label for="beta">β (hFE)</label>
+            <input id="beta" name="beta" type="text" inputmode="decimal"
+                   value="{{ form.get('beta', '') }}" autocomplete="off">
+            {% if errors.get('beta') %}<p class="field-error">{{ errors['beta'] }}</p>{% endif %}
+          </div>
+
+          <div class="field">
+            <label for="vbe">VBE (V)</label>
+            <input id="vbe" name="vbe" type="text" inputmode="decimal"
+                   value="{{ form.get('vbe', '') }}" autocomplete="off">
+            {% if errors.get('vbe') %}<p class="field-error">{{ errors['vbe'] }}</p>{% endif %}
+          </div>
+
+          <div class="field">
+            <label for="r_unit">หน่วยความต้านทาน</label>
+            <select id="r_unit" name="r_unit">
+              <option value="kohm" {% if form.get('r_unit', 'kohm') == 'kohm' %}selected{% endif %}>kΩ</option>
+              <option value="ohm" {% if form.get('r_unit') == 'ohm' %}selected{% endif %}>Ω</option>
+            </select>
+            {% if errors.get('r_unit') %}<p class="field-error">{{ errors['r_unit'] }}</p>{% endif %}
+          </div>
+        </div>
+
+        {% if errors.get('__form__') %}
+        <p class="field-error form-error" role="alert">{{ errors['__form__'] }}</p>
+        {% endif %}
+
+        <div class="actions">
+          <button type="submit">Calculate DC Bias</button>
+          <a class="reset" href="{{ url_for('index', mode=mode) }}">รีเซ็ต</a>
+        </div>
+      </form>
+    </section>
+
+    <section class="card" aria-labelledby="schematic-title">
+      <p class="kicker">วงจร</p>
+      <h2 id="schematic-title">{{ mode_labels[mode] }} (NPN)</h2>
+      <svg class="schematic" viewBox="0 0 520 360" role="img"
+           aria-label="วงจร {{ mode_labels[mode] }} ของ NPN: VCC, ตัวต้านทานฐาน, ตัวต้านทานคอลเลกเตอร์ และตัวต้านทานอิมิตเตอร์ตามโหมดที่เลือก">
+        <g fill="none" stroke="#17344b" stroke-width="2" stroke-linecap="round">
+          <path d="M70 30 H470"/>
+          <path d="M70 292 H200"/>
+        </g>
+        <!-- Labels for rails -->
+        <g fill="#17344b" font-family="Tahoma, sans-serif" font-size="14" font-weight="700">
+          <text x="480" y="24" text-anchor="end">VCC</text>
+          <text x="480" y="286" text-anchor="end">GND</text>
+        </g>
+        <!-- Base resistor: R1 (divider) or RB (fixed/emitter) -->
+        <g fill="none" stroke="#17344b" stroke-width="2" stroke-linecap="round">
+          <path d="M140 30 V50 M140 100 V170"/>
+          <rect x="125" y="50" width="30" height="50" rx="2"/>
+          <path d="M140 170 H270"/>
+          <circle cx="140" cy="170" r="3.5" fill="#17344b"/>
+        </g>
+        {% if mode == 'divider' %}
+        <!-- R2: base node -> ground -->
+        <g fill="none" stroke="#17344b" stroke-width="2" stroke-linecap="round">
+          <path d="M140 170 V200 M140 250 V280"/>
+          <rect x="125" y="200" width="30" height="50" rx="2"/>
+          <path d="M124 280 H160 M130 287 H155"/>
+        </g>
+        {% endif %}
+        <!-- RC: VCC -> collector -->
+        <g fill="none" stroke="#17344b" stroke-width="2" stroke-linecap="round">
+          <path d="M305 30 V50 M305 100 V130"/>
+          <rect x="290" y="50" width="30" height="50" rx="2"/>
+        </g>
+        <!-- NPN transistor -->
+        <g fill="none" stroke="#17344b" stroke-width="2" stroke-linecap="round">
+          <path d="M305 130 L270 160"/>
+          <path d="M270 130 L270 170"/>
+          <path d="M270 150 V210" stroke-width="5"/>
+          <path d="M270 190 L305 220"/>
+        </g>
+        <polygon points="304,219 291,216 298,208" fill="#17344b"/>
+        <circle cx="305" cy="130" r="3.5" fill="#17344b"/>
+        {% if mode == 'fixed' %}
+        <!-- Emitter -> ground directly -->
+        <g fill="none" stroke="#17344b" stroke-width="2" stroke-linecap="round">
+          <path d="M305 220 V292"/>
+          <path d="M287 292 H323 M293 299 H317 M299 306 H311"/>
+        </g>
+        {% else %}
+        <!-- RE: emitter -> ground -->
+        <g fill="none" stroke="#17344b" stroke-width="2" stroke-linecap="round">
+          <path d="M305 220 V240 M305 290 V310"/>
+          <rect x="290" y="240" width="30" height="50" rx="2"/>
+          <path d="M289 310 H321 M295 317 H315 M301 324 H309"/>
+        </g>
+        {% endif %}
+        <!-- Labels -->
+        <g fill="#17344b" font-family="Tahoma, sans-serif" font-size="14" font-weight="700">
+          <text x="98" y="80">{% if mode == 'divider' %}R1{% else %}RB{% endif %}</text>
+          {% if mode == 'divider' %}<text x="98" y="230">R2</text>{% endif %}
+          <text x="335" y="80">RC</text>
+          {% if mode != 'fixed' %}<text x="335" y="270">RE</text>{% endif %}
+          <text x="330" y="175">Q1</text>
+          <text x="195" y="195" font-size="13" font-weight="400">Base</text>
+          <text x="290" y="150" font-size="13" font-weight="400">Collector</text>
+          <text x="330" y="250" font-size="13" font-weight="400">Emitter</text>
+        </g>
+      </svg>
+      <p class="muted">
+        {% if mode == 'divider' %}
+        R1 จาก VCC ไป Base · R2 จาก Base ลง Ground · RC จาก VCC ไป Collector ·
+        RE จาก Emitter ลง Ground
+        {% elif mode == 'fixed' %}
+        RB จาก VCC ไป Base · RC จาก VCC ไป Collector · Emitter ต่อลง Ground โดยตรง
+        {% else %}
+        RB จาก VCC ไป Base · RC จาก VCC ไป Collector · RE จาก Emitter ลง Ground
+        {% endif %}
+      </p>
+    </section>
+
+    {% if result %}
+    <section class="card result-card" aria-labelledby="result-title">
+      <div class="result-head">
+        <div>
+          <p class="kicker">ผลลัพธ์ · {{ mode_labels[mode] }}</p>
+          <h2 id="result-title">จุดทำงาน DC</h2>
+        </div>
+        <span class="badge badge-{{ result.region }}">{{ region_label }}</span>
+      </div>
+
+      <div class="tiles">
+        {% for tile in tiles %}
+        <div class="tile">
+          <span class="tile-label">{{ tile.label }}</span>
+          <strong>{{ tile.value|num3 }}</strong><span class="unit">{{ tile.unit }}</span>
+        </div>
+        {% endfor %}
+      </div>
+
+      <h3>รายละเอียดการคำนวณ</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>ปริมาณ</th><th>ค่า</th><th>หน่วย</th></tr>
+          </thead>
+          <tbody>
+            {% for row in rows %}
+            <tr><td>{{ row.label }}</td><td>{{ row.value|num3 }}</td><td>{{ row.unit }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      {% if result.warnings %}
+      <div class="notice warning">
+        <h3>คำเตือน</h3>
+        <ul>
+          {% for warning in result.warnings %}
+          <li>{{ warning }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+
+      <div class="notice assumptions">
+        <h3>สมมติฐานของแบบจำลอง</h3>
+        <ul>
+          {% for assumption in result.assumptions %}
+          <li>{{ assumption }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </section>
+    {% endif %}
+
+    <section class="card" aria-labelledby="equations-title">
+      <p class="kicker">แบบจำลอง · {{ mode_labels[mode] }}</p>
+      <h2 id="equations-title">สมการ Forward-Active</h2>
+      <div class="equations">
+        {% if mode == 'divider' %}
+        <code>VTH = VCC × R2 / (R1 + R2)</code>
+        <code>RTH = R1 × R2 / (R1 + R2)</code>
+        <code>IB = (VTH − VBE) / (RTH + (β + 1) × RE)</code>
+        <code>IC = β × IB</code>
+        <code>IE = (β + 1) × IB</code>
+        <code>VE = IE × RE</code>
+        <code>VB = VE + VBE</code>
+        <code>VC = VCC − IC × RC</code>
+        <code>VCE = VC − VE</code>
+        {% elif mode == 'fixed' %}
+        <code>IB = (VCC − VBE) / RB</code>
+        <code>IC = β × IB</code>
+        <code>IE = (β + 1) × IB</code>
+        <code>VE = 0 V</code>
+        <code>VB = VBE</code>
+        <code>VC = VCC − IC × RC</code>
+        <code>VCE = VC</code>
+        {% else %}
+        <code>IB = (VCC − VBE) / (RB + (β + 1) × RE)</code>
+        <code>IC = β × IB</code>
+        <code>IE = (β + 1) × IB</code>
+        <code>VE = IE × RE</code>
+        <code>VB = VE + VBE</code>
+        <code>VC = VCC − IC × RC</code>
+        <code>VCE = VC − VE</code>
+        {% endif %}
+      </div>
+      <p class="muted">
+        {% if mode == 'divider' %}
+        Region: Cutoff เมื่อ VTH ≤ VBE · Saturation เมื่อ VCE ≤ 0.30 V
+        (แก้สมการด้วย VCE = 0.30 V และ IC จาก RC/RE) ·
+        VBE นอกช่วง 0.50–0.90 V จะมีคำเตือนเพิ่ม
+        {% else %}
+        ถ้า IB ≤ 0 หรือ VCE ≤ 0.20 V ระบบจะแสดงคำเตือนว่าแบบจำลอง
+        Forward-Active ใช้ไม่ได้ โดยไม่คำนวณค่า Cutoff/Saturation ในโหมดนี้ ·
+        VBE นอกช่วง 0.50–0.90 V จะมีคำเตือนเพิ่ม
+        {% endif %}
+      </p>
+    </section>
+  </main>
+
+  <footer class="wrap footer">
+    <p>ENG29 2121 · Lab 02–03 · BJT DC Bias · Flask + Python backend</p>
+  </footer>
+</body>
+</html>
