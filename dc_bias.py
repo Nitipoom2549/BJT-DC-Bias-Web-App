@@ -15,6 +15,16 @@ from dataclasses import dataclass
 PARAMETERS = ("vcc", "r1", "r2", "rc", "re", "beta", "vbe")
 RESISTOR_PARAMETERS = ("r1", "r2", "rc", "re")
 
+SHARED_PARAMETERS = ("vcc", "beta", "vbe")
+
+# ฟิลด์ตัวต้านทานของแต่ละโหมด — ใช้ทั้งตอน parse และตอนเลือก solver
+MODE_FIELDS: dict[str, tuple[str, ...]] = {
+    "divider": ("r1", "r2", "rc", "re"),
+    "fixed": ("rb", "rc"),
+    "emitter": ("rb", "rc", "re"),
+}
+BIAS_MODES = tuple(MODE_FIELDS)
+
 VCE_SATURATION_THRESHOLD = 0.30
 VBE_TYPICAL_RANGE = (0.50, 0.90)
 
@@ -31,10 +41,55 @@ DEFAULTS: dict[str, str] = {
 
 UNIT_FACTORS = {"ohm": 1.0, "kohm": 1000.0}
 
+MODE_DEFAULTS: dict[str, dict[str, str]] = {
+    "divider": {
+        "vcc": "12",
+        "r1": "100",
+        "r2": "22",
+        "rc": "2.2",
+        "re": "1",
+        "beta": "100",
+        "vbe": "0.7",
+        "r_unit": "kohm",
+    },
+    "fixed": {
+        "vcc": "12",
+        "rb": "470",
+        "rc": "2.2",
+        "beta": "100",
+        "vbe": "0.7",
+        "r_unit": "kohm",
+    },
+    "emitter": {
+        "vcc": "12",
+        "rb": "470",
+        "rc": "2.2",
+        "re": "1",
+        "beta": "100",
+        "vbe": "0.7",
+        "r_unit": "kohm",
+    },
+}
+
+# คีย์ผลลัพธ์ + หน่วยของแต่ละคีย์ — ใช้ร่วมกันทั้งสามโหมด
+OUTPUT_UNITS: dict[str, str] = {
+    "vth_v": "V",
+    "rth_kohm": "kΩ",
+    "ib_ua": "µA",
+    "ic_ma": "mA",
+    "ie_ma": "mA",
+    "ve_v": "V",
+    "vb_v": "V",
+    "vc_v": "V",
+    "vce_v": "V",
+    "power_q_mw": "mW",
+}
+
 MISSING_MESSAGE = "กรุณากรอกค่านี้"
 NON_NUMERIC_MESSAGE = "ต้องเป็นตัวเลข เช่น 12 หรือ 2.2"
 NON_FINITE_MESSAGE = "ต้องเป็นจำนวนจริงที่มีค่าจำกัด"
 INVALID_UNIT_MESSAGE = "หน่วยความต้านทานไม่ถูกต้อง (เลือก Ω หรือ kΩ)"
+INVALID_MODE_MESSAGE = "โหมดไบอัสไม่ถูกต้อง (เลือก Divider, Fixed หรือ Emitter)"
 
 _NUMBER_PATTERN = re.compile(
     r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?"
@@ -51,7 +106,18 @@ REGION_LABELS = {
     "active": "Forward-Active",
     "cutoff": "Cutoff",
     "saturation": "Saturation",
+    "out_of_model": "นอกแบบจำลอง Forward-Active",
 }
+
+VCE_MODEL_LIMIT = 0.20
+IB_NON_POSITIVE_WARNING = (
+    "IB ≤ 0: แบบจำลอง Forward-Active ใช้ไม่ได้ "
+    "(Lab นี้ไม่คำนวณค่า Cutoff หรือ Saturation)"
+)
+VCE_LOW_WARNING = (
+    "VCE ≤ 0.20 V: แบบจำลอง Forward-Active อาจใช้ไม่ได้ "
+    "(Lab นี้ไม่คำนวณค่า Saturation)"
+)
 
 CUTOFF_WARNING = (
     "Cutoff: VTH ≤ VBE ทำให้ทรานซิสเตอร์ไม่นำกระแส; "
@@ -121,15 +187,23 @@ def _parse_number(field: str, text: object, errors: dict[str, str]) -> float | N
     return number
 
 
-def parse_inputs(raw: Mapping[str, str]) -> dict[str, float]:
-    """Parse and validate a submitted form.
+def parse_inputs(raw: Mapping[str, str], mode: str = "divider") -> dict[str, float]:
+    """Parse and validate a submitted form for one bias mode.
 
-    Resistances are returned in ohms; all other values keep their SI unit.
+    Only the fields that the selected mode needs are read, so a mode never
+    requires the resistors of another mode. Resistances are converted from
+    the chosen unit to ohms here — the solvers only ever see SI values.
     Every invalid field is collected so the page can show all errors at once.
     """
+    if mode not in MODE_FIELDS:
+        raise BiasInputError({"mode": INVALID_MODE_MESSAGE})
+
+    resistors = MODE_FIELDS[mode]
+    fields = (*SHARED_PARAMETERS, *resistors)
+
     errors: dict[str, str] = {}
     values: dict[str, float | None] = {
-        field: _parse_number(field, raw.get(field), errors) for field in PARAMETERS
+        field: _parse_number(field, raw.get(field), errors) for field in fields
     }
 
     unit = str(raw.get("r_unit", "ohm")).strip() or "ohm"
@@ -140,7 +214,7 @@ def parse_inputs(raw: Mapping[str, str]) -> dict[str, float]:
     if vcc is not None and vcc <= 0:
         errors["vcc"] = "VCC ต้องมากกว่า 0 V"
 
-    for field in RESISTOR_PARAMETERS:
+    for field in resistors:
         resistance = values[field]
         if resistance is not None and resistance <= 0:
             errors[field] = "ความต้านทานต้องมากกว่า 0 Ω"
@@ -160,10 +234,10 @@ def parse_inputs(raw: Mapping[str, str]) -> dict[str, float]:
         raise BiasInputError(errors)
 
     parsed: dict[str, float] = {}
-    for field in PARAMETERS:
+    for field in fields:
         value = values[field]
         assert value is not None
-        parsed[field] = to_ohms(value, unit) if field in RESISTOR_PARAMETERS else value
+        parsed[field] = to_ohms(value, unit) if field in resistors else value
     return parsed
 
 
@@ -354,3 +428,169 @@ def solve_voltage_divider_bias(
     )
     _ensure_finite(result)
     return result
+
+
+def _check_finite_output(values: Mapping[str, float]) -> None:
+    if not all(math.isfinite(value) for value in values.values()):
+        raise BiasInputError({"__form__": NON_FINITE_RESULT_MESSAGE})
+
+
+def _output(
+    mode: str,
+    region: str,
+    quantities: dict[str, float],
+    warnings: tuple[str, ...],
+    assumptions: tuple[str, ...] = ASSUMPTIONS,
+) -> dict[str, object]:
+    """Build the dict that every mode returns to the Flask layer."""
+    _check_finite_output(quantities)
+    return {
+        "mode": mode,
+        "region": region,
+        "values": quantities,
+        "warnings": warnings,
+        "assumptions": assumptions,
+    }
+
+
+def _quantities(
+    ib: float,
+    ic: float,
+    ie: float,
+    ve: float,
+    vb: float,
+    vc: float,
+    vce: float,
+    extra: Mapping[str, float] | None = None,
+) -> dict[str, float]:
+    """Convert SI results to the display keys shared by all three modes."""
+    quantities = {
+        "ib_ua": ib * 1_000_000.0,
+        "ic_ma": ic * 1_000.0,
+        "ie_ma": ie * 1_000.0,
+        "ve_v": ve,
+        "vb_v": vb,
+        "vc_v": vc,
+        "vce_v": vce,
+        "power_q_mw": vce * ic * 1_000.0,
+    }
+    if extra:
+        quantities.update(extra)
+    return quantities
+
+
+def _lab3_model_checks(
+    ib: float,
+    vce: float,
+    vbe: float,
+) -> tuple[bool, tuple[str, ...]]:
+    """Lab 3 rule: warn when the forward-active model may not apply.
+
+    The handout does not ask for a cutoff/saturation solution in the new
+    modes, so the computed values are shown together with a warning.
+    """
+    warnings: list[str] = []
+    out_of_model = False
+    if ib <= 0.0:
+        warnings.append(IB_NON_POSITIVE_WARNING)
+        out_of_model = True
+    elif vce <= VCE_MODEL_LIMIT:
+        warnings.append(VCE_LOW_WARNING)
+        out_of_model = True
+    if not (VBE_TYPICAL_RANGE[0] <= vbe <= VBE_TYPICAL_RANGE[1]):
+        warnings.append(VBE_RANGE_WARNING)
+    return out_of_model, tuple(warnings)
+
+
+def solve_fixed_bias(
+    vcc: float,
+    rb: float,
+    rc: float,
+    beta: float,
+    vbe: float,
+) -> dict[str, object]:
+    """Fixed bias: RB from VCC to the base, emitter grounded.
+
+    ``IB = (VCC - VBE) / RB``, ``IC = beta * IB``, ``VE = 0``,
+    ``VB = VBE``, ``VC = VCC - IC * RC``, ``VCE = VC``.
+    """
+    ib = (vcc - vbe) / rb
+    ic = beta * ib
+    ie = (beta + 1.0) * ib
+    ve = 0.0
+    vb = vbe
+    vc = vcc - ic * rc
+    vce = vc - ve
+
+    out_of_model, warnings = _lab3_model_checks(ib, vce, vbe)
+    return _output(
+        "fixed",
+        "out_of_model" if out_of_model else "active",
+        _quantities(ib, ic, ie, ve, vb, vc, vce),
+        warnings,
+    )
+
+
+def solve_emitter_bias(
+    vcc: float,
+    rb: float,
+    rc: float,
+    re: float,
+    beta: float,
+    vbe: float,
+) -> dict[str, object]:
+    """Emitter bias: RB from VCC to the base, RE from emitter to ground.
+
+    ``IB = (VCC - VBE) / (RB + (beta + 1) * RE)``,
+    ``IC = beta * IB``, ``IE = (beta + 1) * IB``, ``VE = IE * RE``,
+    ``VB = VE + VBE``, ``VC = VCC - IC * RC``, ``VCE = VC - VE``.
+    """
+    ib = (vcc - vbe) / (rb + (beta + 1.0) * re)
+    ic = beta * ib
+    ie = (beta + 1.0) * ib
+    ve = ie * re
+    vb = ve + vbe
+    vc = vcc - ic * rc
+    vce = vc - ve
+
+    out_of_model, warnings = _lab3_model_checks(ib, vce, vbe)
+    return _output(
+        "emitter",
+        "out_of_model" if out_of_model else "active",
+        _quantities(ib, ic, ie, ve, vb, vc, vce),
+        warnings,
+    )
+
+
+def _divider_output(result: BiasResult) -> dict[str, object]:
+    quantities = _quantities(
+        result.ib,
+        result.ic,
+        result.ie,
+        result.ve,
+        result.vb,
+        result.vc,
+        result.vce,
+        extra={"vth_v": result.vth, "rth_kohm": result.rth_kohm},
+    )
+    return _output(
+        "divider",
+        result.region,
+        quantities,
+        result.warnings,
+        result.assumptions,
+    )
+
+
+def solve_bias(mode: str, values: Mapping[str, float]) -> dict[str, object]:
+    """Dispatch to the solver of the selected mode.
+
+    An unknown mode is an input error; it is never treated as Divider.
+    """
+    if mode == "divider":
+        return _divider_output(solve_voltage_divider_bias(**values))
+    if mode == "fixed":
+        return solve_fixed_bias(**values)
+    if mode == "emitter":
+        return solve_emitter_bias(**values)
+    raise BiasInputError({"mode": INVALID_MODE_MESSAGE})

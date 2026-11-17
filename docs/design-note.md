@@ -62,3 +62,26 @@ Common-Emitter แบบ Voltage-Divider Bias โดยให้ Python Backend 
 
 AC, transient, SPICE, bias ชนิดอื่น, FET, interactive schematic editor,
 authentication, ฐานข้อมูล, และการ deploy บน cloud
+
+## Lab 03 — เพิ่มโหมด Fixed และ Emitter (2026-11-17)
+
+ต่อยอดเว็บเดิมโดยไม่รื้อสถาปัตยกรรม:
+
+| ส่วน | การเปลี่ยนแปลง |
+|---|---|
+| `dc_bias.py` | เพิ่ม `MODE_FIELDS`, `MODE_DEFAULTS`, `OUTPUT_UNITS`, `solve_fixed_bias`, `solve_emitter_bias`, `solve_bias` (dispatcher) และ `parse_inputs(raw, mode)` |
+| `app.py` | อ่าน `mode` จาก `GET /?mode=` และจาก hidden field ของฟอร์ม แล้วเรียก `solve_bias` |
+| `templates/index.html` | มี select เลือกโหมด, แสดงเฉพาะช่องของโหมดนั้น, schematic/สมการเปลี่ยนตามโหมด |
+| `static/style.css` | `.mode-form`, ปุ่มรอง, `.badge-out_of_model` |
+
+หลักการที่คงไว้:
+
+- `solve_voltage_divider_bias` ไม่ถูกแก้ → ผล Divider เท่า Lab 2
+- สมการอยู่ใน `dc_bias.py` ทั้งหมด; `app.py` ไม่มีสมการ
+- คีย์ผลลัพธ์มีหน่วยต่อท้าย (`vb_v`, `ic_ma`, …) ใช้ร่วมกันทั้งสามโหมด
+- แปลง Ω/kΩ → Ω ที่ `parse_inputs` จุดเดียว
+- ไม่มี JavaScript; สลับโหมดด้วยการโหลดหน้าใหม่ผ่าน GET
+
+ตามใบงาน Lab 03: โหมดใหม่เตือนอย่างเดียวเมื่อ `IB ≤ 0` หรือ `VCE ≤ 0.20 V`
+(ไม่แก้สมการ Cutoff/Saturation) และโหมดที่ไม่รู้จักตอบ 400 ไม่เดาเป็น Divider
+

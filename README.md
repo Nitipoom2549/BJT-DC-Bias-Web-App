@@ -11,23 +11,60 @@ forward-active model, and renders the result with units and region warnings.
 
 Included:
 
-- NPN voltage-divider bias, DC only.
-- Inputs: `VCC`, `R1`, `R2`, `RC`, `RE`, `β`, `VBE`.
-- Outputs: `VB`, `VE`, `VC`, `VCE`, `IC`, plus `VTH`, `RTH`, `IB`, `IE`.
-- Input validation with readable Thai errors.
-- Cutoff and saturation warnings.
+- NPN Common-Emitter DC bias in three selectable modes: Voltage Divider,
+  Fixed, and Emitter (single supply).
+- Inputs (all modes): `VCC`, `RC`, `β`, `VBE`. Per mode: `R1`/`R2`/`RE`
+  (divider), `RB` (fixed), `RB`/`RE` (emitter).
+- Outputs: `VB`, `VE`, `VC`, `VCE`, `IC`, plus `IE`, `IB`, and `VTH`/`RTH`
+  for the divider.
+- Input validation with readable Thai errors, per mode.
+- Cutoff and saturation warnings (divider); model-limit warnings for the new
+  modes.
 - Unit handling: resistances in Ω or kΩ.
 
 Not included: AC/small-signal analysis, gain, Bode plots, transient analysis,
 SPICE, other bias types, FETs, or an interactive schematic editor.
+
+## Bias modes
+
+| Mode | Extra inputs | Equations |
+|---|---|---|
+| `divider` | `R1`, `R2`, `RE` | `VTH = VCC·R2/(R1+R2)`, `RTH = R1·R2/(R1+R2)`, `IB = (VTH−VBE)/(RTH+(β+1)RE)` |
+| `fixed` | `RB` | `IB = (VCC−VBE)/RB`, `VE = 0`, `VB = VBE`, `VCE = VC` |
+| `emitter` | `RB`, `RE` | `IB = (VCC−VBE)/(RB+(β+1)RE)` |
+
+Shared by all three:
+
+```text
+IC  = β × IB
+IE  = (β + 1) × IB
+VE  = IE × RE        (0 V for Fixed)
+VB  = VE + VBE
+VC  = VCC − IC × RC
+VCE = VC − VE
+```
+
+Every solver returns the same dict shape, with unit-suffixed keys:
+
+```text
+{"mode": ..., "region": ..., "warnings": [...], "assumptions": [...],
+ "values": {"vth_v": ..., "rth_kohm": ..., "ib_ua": ..., "ic_ma": ...,
+            "ie_ma": ..., "ve_v": ..., "vb_v": ..., "vc_v": ...,
+            "vce_v": ..., "power_q_mw": ...}}
+```
+
+`divider` keeps its Lab 2 cutoff/saturation solution. The two new modes follow
+the Lab 3 handout: when `IB ≤ 0` or `VCE ≤ 0.20 V`, the page shows the computed
+values with a warning that the forward-active model may not apply; it does not
+solve a cutoff/saturation operating point.
 
 ## Project structure
 
 ```text
 .
 ├── app.py                 # Flask app factory, routes, template filters
-├── dc_bias.py             # pure engineering: parsing, validation, solver
-├── templates/index.html   # server-rendered page
+├── dc_bias.py             # pure engineering: parsing, validation, solvers
+├── templates/index.html   # server-rendered page with mode selector
 ├── static/style.css       # responsive presentation
 ├── tests/
 │   ├── test_dc_bias.py    # engineering and validation tests
@@ -36,13 +73,14 @@ SPICE, other bias types, FETs, or an interactive schematic editor.
 │   ├── design-note.md     # architecture and decisions
 │   ├── validation.md      # independent hand calculation + test map
 │   ├── reflection.md      # answers to the handout questions
-│   └── superpowers/       # design spec and implementation plan
+│   └── superpowers/       # design spec and implementation plans
 ├── requirements.txt
 └── .gitignore
 ```
 
 `dc_bias.py` must stay free of Flask, HTML, and HTTP imports. `app.py` owns
-transport and rendering only.
+transport and rendering only. `dc_bias.solve_bias(mode, values)` dispatches to
+`solve_voltage_divider_bias`, `solve_fixed_bias`, or `solve_emitter_bias`.
 
 ## Requirements
 
@@ -147,6 +185,10 @@ VCE = VC − VE
 | `VTH ≤ VBE` | Cutoff | Currents set to zero, `VE = 0`, `VB = VTH`, `VC = VCE = VCC`, warning shown |
 | `VCE ≤ 0.30 V` | Saturation | Solved with `VCE` fixed at `0.30 V`; `IC` comes from `RC`/`RE`, warning shown |
 | otherwise | Forward-Active | Values shown normally |
+
+Divider keeps the rules above. Fixed and Emitter follow the Lab 3 handout:
+`IB ≤ 0` or `VCE ≤ 0.20 V` only adds a warning — the page never invents a
+cutoff or saturation operating point for those modes.
 
 In saturation the transistor is no longer a current source, so `IC = β × IB`
 does not apply. The app solves the same circuit with `VCE = 0.30 V`:

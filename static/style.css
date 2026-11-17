@@ -145,6 +145,17 @@ main { padding: 24px 0 40px; }
   margin-top: 20px;
 }
 
+.mode-form {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  margin: 14px 0 6px;
+}
+
+.mode-form .field {
+  flex: 0 1 340px;
+}
+
 button {
   padding: 12px 22px;
   border: 0;
@@ -157,6 +168,12 @@ button {
 }
 
 button:hover { background: #096b64; }
+
+button.secondary {
+  background: var(--blue);
+}
+
+button.secondary:hover { background: #17506f; }
 
 .reset {
   color: var(--blue);
@@ -196,6 +213,7 @@ button:hover { background: #096b64; }
 .badge-active { background: #e2f5ea; color: var(--green); border: 1px solid #b6e2c8; }
 .badge-cutoff { background: #eef1f5; color: #4c5b6b; border: 1px solid #ccd6e0; }
 .badge-saturation { background: #fbece6; color: var(--orange); border: 1px solid #f0c8b5; }
+.badge-out_of_model { background: #fbece6; color: var(--orange); border: 1px solid #f0c8b5; }
 
 .tiles {
   display: grid;
@@ -306,6 +324,7 @@ th:nth-child(2) { text-align: right; }
   .grid, .tiles { grid-template-columns: 1fr; }
   .result-head { flex-direction: column; }
   .actions { flex-direction: column; align-items: stretch; }
+  .mode-form { flex-direction: column; align-items: stretch; }
   .reset { text-align: center; }
 }
 
